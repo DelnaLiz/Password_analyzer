@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Password Policy & Crack-Time Analysis</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/zxcvbn/4.4.2/zxcvbn.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+<style>
+  :root{
+    --ink:#0F161F;
+    --panel:#161F2A;
+    --panel-2:#1C2733;
+    --line:#2B3846;
+    --paper:#E9E4D8;
+    --paper-dim:#A9A08E;
+    --amber:#DA9E4F;
+    --amber-dim:#8B6B3A;
+    --red:#C0594B;
+    --green:#6E9E79;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Cascadia Code", monospace;
+    --serif: Georgia, "Iowan Old Style", "Palatino Linotype", "Book Antiqua", serif;
+    --sans: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0;
+    background:
+      radial-gradient(ellipse 900px 500px at 85% -10%, rgba(218,158,79,0.07), transparent 60%),
+      repeating-linear-gradient(0deg, rgba(255,255,255,0.015) 0px, rgba(255,255,255,0.015) 1px, transparent 1px, transparent 32px),
+      var(--ink);
+    color:var(--paper);
+    font-family:var(--sans);
+    line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+  @media (prefers-reduced-motion: reduce){
+    html{scroll-behavior:auto;}
+    *{animation-duration:0.001ms !important; transition-duration:0.001ms !important;}
+  }
+  ::selection{background:var(--amber-dim);color:var(--ink);}
+  .wrap{max-width:1440px;margin:0 auto;padding:0 40px 90px;}
+
+  header.hero{
+    border-bottom:1px solid var(--line);
+    padding:52px 0 32px;
+    margin-bottom:40px;
+    display:grid;
+    grid-template-columns:1fr 220px;
+    gap:32px;
+    align-items:start;
+  }
+  @media (max-width:760px){ header.hero{grid-template-columns:1fr;} .bitgrid{display:none;} }
+  .kicker{
+    font-family:var(--mono);
+    font-size:12.5px;
+    color:var(--amber);
+    letter-spacing:0.02em;
+    margin:0 0 14px;
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .kicker::before{
+    content:"";
+    width:7px;height:7px;
+    background:var(--amber);
+    border-radius:50%;
+    display:inline-block;
+  }
+  h1{
+    font-family:var(--serif);
+    font-weight:400;
+    font-size:40px;
+    line-height:1.15;
+    margin:0 0 14px;
+    color:var(--paper);
+    max-width:13ch;
+  }
+  .dek{
+    font-size:15.5px;
+    color:var(--paper-dim);
+    max-width:60ch;
+    margin:0;
+  }
+  .bitgrid{
+    display:grid;
+    grid-template-columns:repeat(6,1fr);
+    gap:4px;
+    padding-top:6px;
+  }
+  .bitgrid span{
+    aspect-ratio:1;
+    background:var(--panel-2);
+    border:1px solid var(--line);
+  }
+  .bitgrid span.lit{
+    background:var(--amber);
+    border-color:var(--amber);
+    opacity:0.85;
+  }
+  .privacy-note{
+    font-family:var(--mono);
+    font-size:12px;
+    color:var(--paper-dim);
+    margin-top:18px;
+    border-left:2px solid var(--amber-dim);
+    padding-left:12px;
+  }
+
+  .controls-row{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:32px;
+    align-items:start;
+    margin-bottom:40px;
+  }
+  @media (max-width:820px){ .controls-row{grid-template-columns:1fr;} }
+  .main-col{min-width:0;}
+
+  .empty-state{
+    height:100%;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    border:1px dashed var(--line);
+    padding:50px 40px;
+    min-height:560px;
+  }
+  .empty-state .es-icon{
+    width:44px;height:44px;
+    border:1px solid var(--amber-dim);
+    display:flex;align-items:center;justify-content:center;
+    margin-bottom:22px;
+    color:var(--amber);
+  }
+  .empty-state h3{
+    font-family:var(--serif);
+    font-weight:400;
+    font-size:24px;
+    margin:0 0 10px;
+    max-width:22ch;
+  }
+  .empty-state p{
+    font-size:14px;
+    color:var(--paper-dim);
+    max-width:48ch;
+    margin:0 0 34px;
+  }
+  .es-features{
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:1px;
+    background:var(--line);
+    border:1px solid var(--line);
+  }
+  @media (max-width:640px){ .es-features{grid-template-columns:1fr;} }
+  .es-features div{
+    background:var(--panel-2);
+    padding:18px 16px;
+  }
+  .es-features .f-num{
+    font-family:var(--mono);
+    font-size:11px;
+    color:var(--amber);
+    margin-bottom:8px;
+  }
+  .es-features .f-title{
+    font-size:13.5px;
+    color:var(--paper);
+    margin-bottom:4px;
+  }
+  .es-features .f-desc{
+    font-size:12px;
+    color:var(--paper-dim);
+    line-height:1.45;
+  }
+
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--line);
+    padding:22px;
+  }
+  .panel h2{
+    font-family:var(--serif);
+    font-weight:400;
+    font-size:16px;
+    margin:0 0 4px;
+    color:var(--paper);
+  }
+  .panel .sub{
+    font-size:12.5px;
+    color:var(--paper-dim);
+    margin:0 0 16px;
+  }
+
+  textarea{
+    width:100%;
+    min-height:190px;
+    background:var(--ink);
+    border:1px solid var(--line);
+    color:var(--paper);
+    font-family:var(--mono);
+    font-size:13px;
+    padding:12px;
+    resize:vertical;
+  }
+  textarea:focus{outline:1px solid var(--amber);}
+
+  .btn-row{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;}
+  button{
+    font-family:var(--sans);
+    font-size:13px;
+    padding:9px 14px;
+    background:transparent;
+    color:var(--paper);
+    border:1px solid var(--line);
+    cursor:pointer;
+  }
+  button:hover{border-color:var(--amber-dim);}
+  button:focus-visible{outline:2px solid var(--amber);outline-offset:2px;}
+  button.primary{
+    background:var(--amber);
+    border-color:var(--amber);
+    color:var(--ink);
+    font-weight:600;
+    width:100%;
+    padding:11px 14px;
+    margin-top:16px;
+  }
+  button.primary:hover{background:#e8ac60;}
+
+  fieldset{border:none;padding:0;margin:18px 0 0;}
+  legend{
+    font-size:12.5px;
+    color:var(--paper-dim);
+    padding:0;
+    margin-bottom:8px;
+  }
+  .radio-opt{
+    display:flex;
+    gap:9px;
+    align-items:flex-start;
+    padding:9px 0;
+    border-top:1px solid var(--line);
+    cursor:pointer;
+  }
+  .radio-opt:first-of-type{border-top:none;}
+  .radio-opt input{margin-top:3px;}
+  .radio-opt .lbl{font-size:13.5px;color:var(--paper);}
+  .radio-opt .desc{font-size:12px;color:var(--paper-dim);margin-top:2px;}
+
+  #resultsArea{display:none;}
+  #resultsArea.show{display:block;}
+  #emptyState.hide{display:none;}
+
+  .stat-row{
+    display:grid;
+    grid-template-columns:repeat(4,1fr);
+    gap:1px;
+    background:var(--line);
+    border:1px solid var(--line);
+    margin-bottom:30px;
+  }
+  @media (max-width:700px){ .stat-row{grid-template-columns:1fr 1fr;} }
+  .stat{
+    background:var(--panel);
+    padding:18px 16px;
+  }
+  .stat .num{
+    font-family:var(--serif);
+    font-size:30px;
+    color:var(--amber);
+    line-height:1;
+  }
+  .stat .lbl{
+    font-size:11.5px;
+    color:var(--paper-dim);
+    margin-top:8px;
+  }
+
+  section.block{margin-bottom:40px;}
+  section.block h3{
+    font-family:var(--serif);
+    font-weight:400;
+    font-size:19px;
+    margin:0 0 4px;
+  }
+  section.block .note{
+    font-size:12.5px;
+    color:var(--paper-dim);
+    margin:0 0 18px;
+    max-width:70ch;
+  }
+
+  .chart-box{
+    background:var(--panel);
+    border:1px solid var(--line);
+    padding:20px;
+    height:280px;
+  }
+  .chart-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:20px;
+  }
+  @media (max-width:860px){ .chart-grid{grid-template-columns:1fr;} }
+
+  table{
+    width:100%;
+    border-collapse:collapse;
+    font-size:13px;
+  }
+  thead th{
+    text-align:left;
+    font-weight:600;
+    font-size:11.5px;
+    color:var(--paper-dim);
+    padding:9px 10px;
+    border-bottom:1px solid var(--line);
+  }
+  tbody td{
+    padding:9px 10px;
+    border-bottom:1px solid var(--line);
+    vertical-align:middle;
+  }
+  tbody tr:hover{background:var(--panel-2);}
+  td.pw, th.pw{font-family:var(--mono);}
+  .pill{
+    display:inline-block;
+    padding:2px 9px;
+    font-size:11.5px;
+    font-family:var(--mono);
+  }
+  .pill.pass{color:var(--green);border:1px solid var(--green);}
+  .pill.fail{color:var(--red);border:1px solid var(--red);}
+  .score-bar{display:flex;gap:2px;}
+  .score-bar span{width:14px;height:6px;background:var(--line);}
+  .score-bar span.on0{background:var(--red);}
+  .score-bar span.on1{background:#C97C4A;}
+  .score-bar span.on2{background:var(--amber);}
+  .score-bar span.on3, .score-bar span.on4{background:var(--green);}
+  .reveal-btn{
+    background:none;border:none;color:var(--paper-dim);
+    font-family:var(--mono);font-size:12px;cursor:pointer;padding:0;
+    text-decoration:underline;text-underline-offset:2px;
+  }
+
+  footer{
+    margin-top:50px;
+    padding-top:20px;
+    border-top:1px solid var(--line);
+    font-size:12px;
+    color:var(--paper-dim);
+  }
+
+  .gen-panel{}
+  .gen-panel .primary{margin-top:22px;}
+  .gen-output{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    background:var(--ink);
+    border:1px solid var(--line);
+    padding:12px;
+    margin-top:14px;
+  }
+  .gen-output span{
+    font-family:var(--mono);
+    font-size:15px;
+    letter-spacing:0.02em;
+    word-break:break-all;
+    flex:1;
+  }
+  .gen-output .copy-btn{
+    background:none;border:none;color:var(--paper-dim);
+    font-family:var(--mono);font-size:11.5px;cursor:pointer;padding:2px 0;
+    text-decoration:underline;text-underline-offset:2px;flex-shrink:0;
+  }
+  .gen-meta{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-top:10px;
+  }
+  .gen-strength{font-family:var(--mono);font-size:11.5px;color:var(--paper-dim);}
+  .gen-strength b{color:var(--amber);}
+  .slider-row{margin-top:16px;}
+  .slider-row label{
+    display:flex;
+    justify-content:space-between;
+    font-size:12.5px;
+    color:var(--paper-dim);
+    margin-bottom:6px;
+  }
+  .slider-row input[type="range"]{width:100%;accent-color:var(--amber);}
+  .check-row{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    margin-top:10px;
+    font-size:13px;
+  }
+  .check-row input{accent-color:var(--amber);}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <p class="kicker">ethical hacking coursework — client-side analysis</p>
+    <h1>Password Policy & Crack-Time Analysis</h1>
+    <p class="dek">Enter a set of passwords, choose a policy to test them against, and compare a naive brute-force estimate with a pattern-aware model to see why raw character-set math overstates real-world security.</p>
+    <p class="privacy-note">All analysis runs in your browser. Nothing you type here is transmitted or stored anywhere.</p>
+  </header>
+
+  <div class="controls-row">
+    <div class="panel">
+      <h2>Dataset</h2>
+      <p class="sub">One password per line. Use your own list or load the built-in sample set (common weak passwords plus a few strong ones, for contrast).</p>
+      <textarea id="pwInput" placeholder="123456
+password
+Tr0ub4dor&3
+correcthorsebatterystaple"></textarea>
+      <div class="btn-row">
+        <button id="loadSample">Load sample set</button>
+        <button id="clearInput">Clear</button>
+      </div>
+
+      <fieldset>
+        <legend>Policy to test against</legend>
+        <label class="radio-opt">
+          <input type="radio" name="policy" value="legacy" checked>
+          <span>
+            <span class="lbl">Legacy complexity policy</span><br>
+            <span class="desc">8+ characters, must include upper, lower, digit, and a special character.</span>
+          </span>
+        </label>
+        <label class="radio-opt">
+          <input type="radio" name="policy" value="nist">
+          <span>
+            <span class="lbl">NIST 800-63B style</span><br>
+            <span class="desc">12+ characters, not a common password, not all one repeated character.</span>
+          </span>
+        </label>
+      </fieldset>
+
+      <button class="primary" id="runBtn">Run analysis</button>
+    </div>
+
+    <div class="panel gen-panel">
+      <h2>Generate a strong password</h2>
+      <p class="sub">Uses the browser's cryptographic RNG. Each click produces a new, independent password — nothing is derived from a seed or pattern.</p>
+
+      <div class="slider-row">
+        <label><span>Length</span><span id="lenVal">18</span></label>
+        <input type="range" id="lenSlider" min="8" max="32" value="18">
+      </div>
+      <label class="check-row"><input type="checkbox" id="optSymbols" checked> Include symbols (!@#$ etc.)</label>
+      <label class="check-row"><input type="checkbox" id="optAmbig"> Exclude ambiguous characters (0/O, 1/l/I)</label>
+
+      <button class="primary" id="genBtn">Generate</button>
+
+      <div class="gen-output">
+        <span id="genOutput">click generate</span>
+        <button class="copy-btn" id="copyBtn">copy</button>
+      </div>
+      <div class="gen-meta">
+        <span class="gen-strength">zxcvbn score: <b id="genScore">—</b></span>
+        <span class="gen-strength" id="genCrack"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="main-col">
+      <div id="emptyState" class="empty-state">
+        <div class="es-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="4" y="10" width="16" height="10" rx="1"/>
+            <path d="M8 10V7a4 4 0 0 1 8 0v3"/>
+            <circle cx="12" cy="15" r="1.4" fill="currentColor" stroke="none"/>
+          </svg>
+        </div>
+        <h3>Results will appear here</h3>
+        <p>Load the sample set or paste your own list above, pick a policy, and run the analysis. You'll get a full breakdown across three views:</p>
+        <div class="es-features">
+          <div>
+            <div class="f-num">01</div>
+            <div class="f-title">Summary stats</div>
+            <div class="f-desc">Pass rate against your chosen policy, average strength score, and average crack time at a glance.</div>
+          </div>
+          <div>
+            <div class="f-num">02</div>
+            <div class="f-title">Two charts</div>
+            <div class="f-desc">Strength-score distribution, plus naive entropy math versus a pattern-aware model, side by side.</div>
+          </div>
+          <div>
+            <div class="f-num">03</div>
+            <div class="f-title">Per-password table</div>
+            <div class="f-desc">Every password scored individually, masked by default, with a reveal toggle for review.</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="resultsArea">
+      <div class="stat-row" id="statRow"></div>
+
+      <section class="block">
+        <h3>Score distribution &amp; model comparison</h3>
+        <p class="note">Left: how many passwords fall into each zxcvbn strength band (0 = trivially guessed, 4 = very hard). Right: average estimated crack time under an offline fast-hash attack (10B guesses/sec), naive entropy math versus a pattern-aware model — the gap is the point.</p>
+        <div class="chart-grid">
+          <div class="chart-box"><canvas id="scoreChart"></canvas></div>
+          <div class="chart-box"><canvas id="compareChart"></canvas></div>
+        </div>
+      </section>
+
+      <section class="block">
+        <h3>Per-password results</h3>
+        <p class="note">Passwords are masked by default — click "reveal" to view. Crack-time columns assume an offline attack against a fast, unsalted hash (worst case) and a slow adaptive hash like bcrypt (best case).</p>
+        <table>
+          <thead>
+            <tr>
+              <th class="pw">Password</th>
+              <th>Length</th>
+              <th>Policy</th>
+              <th>zxcvbn score</th>
+              <th>Naive crack time</th>
+              <th>Fast-hash crack time</th>
+              <th>Slow-hash crack time</th>
+            </tr>
+          </thead>
+          <tbody id="resultsBody"></tbody>
+        </table>
+      </section>
+      </div>
+    </div>
+
+  <footer>
+    Built for coursework use. Sample dataset draws on widely published weak-password lists used in security research and awareness training — no real user data is included.
+  </footer>
+</div>
+
+<script>
+const SAMPLE = [
+  "123456","password","123456789","qwerty","12345678","111111","1234567",
+  "letmein","1234567890","admin","welcome","monkey","login","abc123",
+  "iloveyou","dragon","football","sunshine","princess","master",
+  "Summer2024!","Tr0ub4dor&3","correcthorsebatterystaple",
+  "P@ssw0rd123!","Xk9$mQ2#vL7p","BlueMountain-42-Trail","hunter2"
+];
+
+const COMMON_SET = new Set(SAMPLE.map(p => p.toLowerCase()).concat(
+  ["password1","qwerty123","000000","1q2w3e4r","iloveyou1"]
+));
+
+function checkLegacyPolicy(pw){
+  return pw.length >= 8
+    && /[A-Z]/.test(pw)
+    && /[a-z]/.test(pw)
+    && /\d/.test(pw)
+    && /[^A-Za-z0-9]/.test(pw);
+}
+function checkNistPolicy(pw){
+  return pw.length >= 12
+    && !COMMON_SET.has(pw.toLowerCase())
+    && new Set(pw).size > 1;
+}
+
+function charsetSize(pw){
+  let n = 0;
+  if(/[a-z]/.test(pw)) n += 26;
+  if(/[A-Z]/.test(pw)) n += 26;
+  if(/\d/.test(pw)) n += 10;
+  if(/[^A-Za-z0-9]/.test(pw)) n += 32;
+  return n || 1;
+}
+function naiveEntropyBits(pw){
+  return pw.length * Math.log2(charsetSize(pw));
+}
+function naiveCrackSeconds(pw, guessesPerSec){
+  const totalGuesses = Math.pow(2, naiveEntropyBits(pw));
+  return (totalGuesses / 2) / guessesPerSec;
+}
+
+const RATES = {
+  fast: 1e10,   // offline, fast unsalted hash on modern GPU rig
+  slow: 1e4     // offline, slow adaptive hash (bcrypt/scrypt)
+};
+
+function fmtSeconds(s){
+  if(!isFinite(s)) return "—";
+  if(s < 1) return "instant";
+  const units = [
+    ["century", 3153600000],
+    ["year", 31536000],
+    ["day", 86400],
+    ["hour", 3600],
+    ["minute", 60],
+    ["second", 1]
+  ];
+  for(const [name, size] of units){
+    if(s >= size){
+      const val = s / size;
+      const display = val >= 1000 ? val.toExponential(1) : val.toFixed(val >= 10 ? 0 : 1);
+      return `${display} ${name}${val >= 2 ? "s" : ""}`;
+    }
+  }
+  return "instant";
+}
+
+let scoreChartInst, compareChartInst;
+
+function runAnalysis(){
+  const raw = document.getElementById('pwInput').value;
+  const passwords = raw.split("\n").map(s => s.trim()).filter(Boolean);
+  if(passwords.length === 0){ return; }
+
+  const policy = document.querySelector('input[name="policy"]:checked').value;
+  const checkFn = policy === "legacy" ? checkLegacyPolicy : checkNistPolicy;
+
+  const rows = passwords.map(pw => {
+    const zx = zxcvbn(pw);
+    const entropyBits = naiveEntropyBits(pw);
+    const naiveFast = naiveCrackSeconds(pw, RATES.fast);
+    const zxFast = zx.crack_times_seconds.offline_fast_hashing_1e10_per_second;
+    const zxSlow = zx.crack_times_seconds.offline_slow_hashing_1e4_per_second;
+    return {
+      pw, length: pw.length, passes: checkFn(pw),
+      zxScore: zx.score, entropyBits,
+      naiveFast, zxFast, zxSlow
+    };
+  });
+
+  renderStats(rows, policy);
+  renderTable(rows);
+  renderCharts(rows);
+
+  document.getElementById('emptyState').classList.add('hide');
+  document.getElementById('resultsArea').classList.add('show');
+}
+
+function renderStats(rows, policy){
+  const total = rows.length;
+  const passCount = rows.filter(r => r.passes).length;
+  const avgScore = (rows.reduce((a,r) => a + r.zxScore, 0) / total).toFixed(1);
+  const weakest = rows.reduce((a,b) => a.zxScore <= b.zxScore ? a : b);
+
+  const stats = [
+    [`${passCount}/${total}`, `pass ${policy === "legacy" ? "legacy" : "NIST-style"} policy`],
+    [avgScore, "average zxcvbn score (0–4)"],
+    [fmtSeconds(rows.reduce((a,r)=>a+r.zxFast,0)/total), "avg. fast-hash crack time"],
+    [weakest.zxScore, `weakest password scores ${weakest.zxScore}/4`]
+  ];
+
+  document.getElementById('statRow').innerHTML = stats.map(([num,lbl]) =>
+    `<div class="stat"><div class="num">${num}</div><div class="lbl">${lbl}</div></div>`
+  ).join("");
+}
+
+function maskPw(pw){
+  return "•".repeat(Math.min(pw.length, 14));
+}
+
+function renderTable(rows){
+  const body = document.getElementById('resultsBody');
+  body.innerHTML = rows.map((r,i) => `
+    <tr>
+      <td class="pw">
+        <span id="mask-${i}">${maskPw(r.pw)}</span>
+        <button class="reveal-btn" data-i="${i}" data-pw="${r.pw.replace(/"/g,'&quot;')}">reveal</button>
+      </td>
+      <td>${r.length}</td>
+      <td><span class="pill ${r.passes ? 'pass' : 'fail'}">${r.passes ? 'pass' : 'fail'}</span></td>
+      <td>
+        <div class="score-bar">
+          ${[0,1,2,3,4].map(n => `<span class="${n <= r.zxScore ? 'on'+r.zxScore : ''}"></span>`).join("")}
+        </div>
+      </td>
+      <td>${fmtSeconds(r.naiveFast)}</td>
+      <td>${fmtSeconds(r.zxFast)}</td>
+      <td>${fmtSeconds(r.zxSlow)}</td>
+    </tr>
+  `).join("");
+
+  body.querySelectorAll('.reveal-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const i = btn.dataset.i;
+      const span = document.getElementById('mask-'+i);
+      const showing = span.dataset.showing === "1";
+      span.textContent = showing ? maskPw(btn.dataset.pw) : btn.dataset.pw;
+      span.dataset.showing = showing ? "0" : "1";
+      btn.textContent = showing ? "reveal" : "hide";
+    });
+  });
+}
+
+function renderCharts(rows){
+  const ctx1 = document.getElementById('scoreChart').getContext('2d');
+  const ctx2 = document.getElementById('compareChart').getContext('2d');
+
+  const dist = [0,0,0,0,0];
+  rows.forEach(r => dist[r.zxScore]++);
+
+  const avgNaive = rows.reduce((a,r)=>a+r.naiveFast,0) / rows.length;
+  const avgZx = rows.reduce((a,r)=>a+r.zxFast,0) / rows.length;
+
+  if(scoreChartInst) scoreChartInst.destroy();
+  if(compareChartInst) compareChartInst.destroy();
+
+  const gridColor = "#2B3846";
+  const textColor = "#A9A08E";
+
+  scoreChartInst = new Chart(ctx1, {
+    type: 'bar',
+    data: {
+      labels: ["0 · trivial","1 · weak","2 · fair","3 · good","4 · strong"],
+      datasets: [{ data: dist, backgroundColor: "#DA9E4F" }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, title: { display: false } },
+      scales: {
+        x: { ticks: { color: textColor, font: {size: 10.5} }, grid: { color: gridColor } },
+        y: { beginAtZero: true, ticks: { color: textColor, precision:0 }, grid: { color: gridColor } }
+      }
+    }
+  });
+
+  compareChartInst = new Chart(ctx2, {
+    type: 'bar',
+    data: {
+      labels: ["Naive entropy model", "Pattern-aware model"],
+      datasets: [{ data: [avgNaive, avgZx], backgroundColor: ["#8B6B3A", "#DA9E4F"] }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: textColor }, grid: { color: gridColor } },
+        y: {
+          type: 'logarithmic',
+          ticks: { color: textColor, callback: (v) => fmtSeconds(v) },
+          grid: { color: gridColor }
+        }
+      }
+    }
+  });
+}
+
+const CHARSETS = {
+  lower: "abcdefghijklmnopqrstuvwxyz",
+  upper: "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+  digits: "0123456789",
+  symbols: "!@#$%^&*()-_=+[]{};:,.<>?/",
+  ambiguous: "0O1lI"
+};
+
+function secureRandomInt(maxExclusive){
+  const arr = new Uint32Array(1);
+  const limit = Math.floor(0xFFFFFFFF / maxExclusive) * maxExclusive;
+  let val;
+  do { crypto.getRandomValues(arr); val = arr[0]; } while(val >= limit);
+  return val % maxExclusive;
+}
+
+function generatePassword(length, useSymbols, excludeAmbiguous){
+  let pool = CHARSETS.lower + CHARSETS.upper + CHARSETS.digits;
+  if(useSymbols) pool += CHARSETS.symbols;
+  if(excludeAmbiguous){
+    pool = [...pool].filter(c => !CHARSETS.ambiguous.includes(c)).join("");
+  }
+
+  // guarantee at least one char from each active class, rest random, then shuffle
+  const classes = [CHARSETS.lower, CHARSETS.upper, CHARSETS.digits];
+  if(useSymbols) classes.push(CHARSETS.symbols);
+
+  let chars = classes.map(cls => {
+    const filtered = excludeAmbiguous ? [...cls].filter(c => !CHARSETS.ambiguous.includes(c)).join("") : cls;
+    return filtered[secureRandomInt(filtered.length)];
+  });
+
+  while(chars.length < length){
+    chars.push(pool[secureRandomInt(pool.length)]);
+  }
+
+  // Fisher-Yates shuffle using crypto RNG
+  for(let i = chars.length - 1; i > 0; i--){
+    const j = secureRandomInt(i + 1);
+    [chars[i], chars[j]] = [chars[j], chars[i]];
+  }
+
+  return chars.join("");
+}
+
+function updateGenScore(pw){
+  const zx = zxcvbn(pw);
+  const scoreEl = document.getElementById('genScore');
+  scoreEl.textContent = `${zx.score}/4`;
+  document.getElementById('genCrack').textContent =
+    `offline fast-hash crack time: ${fmtSeconds(zx.crack_times_seconds.offline_fast_hashing_1e10_per_second)}`;
+}
+
+const lenSlider = document.getElementById('lenSlider');
+lenSlider.addEventListener('input', () => {
+  document.getElementById('lenVal').textContent = lenSlider.value;
+});
+
+document.getElementById('genBtn').addEventListener('click', () => {
+  const length = parseInt(lenSlider.value, 10);
+  const useSymbols = document.getElementById('optSymbols').checked;
+  const excludeAmbiguous = document.getElementById('optAmbig').checked;
+  const pw = generatePassword(length, useSymbols, excludeAmbiguous);
+  document.getElementById('genOutput').textContent = pw;
+  document.getElementById('copyBtn').textContent = "copy";
+  updateGenScore(pw);
+});
+
+document.getElementById('copyBtn').addEventListener('click', () => {
+  const text = document.getElementById('genOutput').textContent;
+  if(text === "click generate") return;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById('copyBtn');
+    btn.textContent = "copied";
+    setTimeout(() => { btn.textContent = "copy"; }, 1500);
+  });
+});
+
+document.getElementById('loadSample').addEventListener('click', () => {
+  document.getElementById('pwInput').value = SAMPLE.join("\n");
+});
+document.getElementById('clearInput').addEventListener('click', () => {
+  document.getElementById('pwInput').value = "";
+});
+document.getElementById('runBtn').addEventListener('click', runAnalysis);
+</script>
+</body>
+</html>
